@@ -1226,7 +1226,7 @@ function initialize(selector) {
 	buildMapChooser();
 	mapResizeWidth();
 //	rotateArea(selector);
-//	imageMapTrim(selector);
+	imageMapTrim(selector);
 	resizeImage(selector);
 	colorMap();
 	buildLegend();

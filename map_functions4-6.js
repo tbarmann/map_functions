@@ -278,15 +278,11 @@ function locDataLookup(location,field_index) {
 		return;
 	}
 
-	var join_field = map_init.join_field;
-	var target_field_name = map_init.fields[field_index].name;
-	var datasource = map_init.datasource;
-
-	var searchObj = {};
-	searchObj[join_field] = location;
-	var data = _.findWhere(datasource,searchObj);
-	if (data!== undefined) {
-		return data[target_field_name];
+	if (map_init.hasOwnProperty("indexed_data")) {
+		var this_data_obj = map_init.indexed_data[location.replaceSpacesLowerCase()];
+		var map_field_name = map_init.fields[field_index].name;
+		var this_data = this_data_obj[map_field_name];
+		return this_data;
 	}
 
 	return "No data for " + location;
@@ -326,7 +322,7 @@ Contour.prototype.area = function() {
 
 //////////////////////////////////////////////////////////////////////////////////////
 Contour.prototype.centroid = function() {
-  var pts = this. pts;
+  var pts = this.pts;
   var nPts = pts.length;
   var x=0; var y=0;
   var f;
@@ -896,48 +892,51 @@ function getFieldIndexByName (fieldname) {
 	return 0;
 }
 
-//////////////////////////////////////////////////////////////////////////////////////
-function labelMap (field_index) {
 
-	if (field_index === undefined) {
-		var field_index = getFieldIndexByName(map_init.initial_field);
-	}
+//////////////////////////////////////////////////////////////////////////////////////
+function labelMap (img_selector,field_index) {
+
 
 	if (map_init.settings.label_map === false) {
 		return;
 	}
 
+	if (field_index === undefined) {
+
+		var field_index = 0;
+		if (map_init.hasOwnProperty('initial_field')) {
+			field_index = getFieldIndexByName(map_init.initial_field);
+		}
+	}
+
 	var field = map_init.fields[field_index];
 
-	// set image to the correct dimensions
-	var maxXY = getMaxXY("area");
-
-	$('.map_container').css('width',maxXY.x + 'px');
-	$('.map_container').css('height',maxXY.y + 'px');
-
-
-	$('.map').css('width',maxXY.x + 'px');
-	$('.map').css('height',maxXY.y + 'px');
-
-	$('.map img').attr('width',maxXY.x);
-	$('.map img').attr('height',maxXY.y);
-
+	var area_selector = $("img" + img_selector).attr("usemap") + " area";
  	var label_div_content = "";
 
-	$("area").each (function (i) {
+	
+	$(area_selector).each (function (i) {
 
-		//get the onMouseOver attribute
-		var thisOnMouseOver = $(this).attr('onMouseOver') || "";
-		var thisOnMouseOverStr = thisOnMouseOver.toString();
-		var location = extractLoc(thisOnMouseOverStr) || "";
-		var this_value = locDataLookup(location,field_index);
+		
+		if ($(this).data('geo')) {
+			var location =  $(this).data('geo');
+		}
+		else {
+
+			//get the onMouseOver attribute
+			var thisOnMouseOver = $(this).attr('onMouseOver') || "";
+			var thisOnMouseOverStr = thisOnMouseOver.toString();
+			var location = extractLoc(thisOnMouseOverStr) || "";
+		}
+		
+		var this_value = locDataLookup(location.replaceSpacesLowerCase(),field_index);
 		var label = location.restoreSpaces();
 
 
 		// see if we want the map labels to show location or the value for this field
 		if (typeof field !== "undefined") {
 			if (field.hasOwnProperty('map_display')) {
-				if (field.map_display === "value") {
+				if (field.map_display === "values") {
 					label = this_value;
 
 				}
@@ -954,6 +953,11 @@ function labelMap (field_index) {
 			perimeter.pts.push(this_point);
 		}
 		var this_centroid_pt = perimeter.centroid();
+
+		// test for NaN
+		if (this_centroid_pt.x !== this_centroid_pt.x  || this_centroid_pt.y!==this_centroid_pt.y) {
+			return;
+		}
 
 		// create a style based on the centroid x,y coordinates
 		var this_style = 'left:' + this_centroid_pt.x + 'px; top:' + this_centroid_pt.y + 'px; ';
@@ -995,8 +999,14 @@ function colorMap(field_index) {
 	
 
 	$("area").each (function () {
-			var thisOnMouseOver = $(this).attr('onMouseOver') || "";
-			var this_loc = extractLoc(thisOnMouseOver.toString());
+			if ($(this).data('geo')) {
+				var this_loc = $(this).data('geo');
+			}
+			else {
+				var thisOnMouseOver = $(this).attr('onMouseOver') || "";
+				var this_loc = extractLoc(thisOnMouseOver.toString());
+			}
+
 			var border_color = map_init.settings.polygon_border_color;
 
 			if (map_init.hasOwnProperty("indexed_data")) {
@@ -1045,6 +1055,10 @@ function getLabel(field_name) {
 //////////////////////////////////////////////////////////////////////////////////////
 function jsonToTable(json,this_class,this_id) {
 
+	if (typeof(json) === "undefined") {
+		return "";
+	}
+
 	var classStr = (this_class) ? ' class="' + this_class + '" ' : '';
 	var idStr = (this_id) ? ' id="' + this_id + '" ' : '';
 	var headers = new Array();
@@ -1080,10 +1094,10 @@ function jsonToTable(json,this_class,this_id) {
 	return html;
 }
 //////////////////////////////////////////////////////////////////////////////////////
-function buildMapChooser(){
+function buildMapChooser(selector){
 	// global - map_init
 	if (map_init.settings.show_map_chooser === true) {
-		var html = '<select onchange="changeMap(this.value);">';
+		var html = '<select onchange="changeMap(\'' + selector + '\',this.value);">';
 		$.each(map_init.fields, function(index) {
 			if (this.mapable === true) {
 				html += '<option value="' + index + '">' + this.label + '</option>'
@@ -1095,9 +1109,10 @@ function buildMapChooser(){
 }
 
 //////////////////////////////////////////////////////////////////////////////////////
-function changeMap(index) {
-//	labelMap(index);
+function changeMap(selector,index) {
+
 	colorMap(index);
+	labelMap(selector,index)
 	buildLegend(index);
 	$('.map').maphilight();
 }
@@ -1223,21 +1238,28 @@ function initialize(selector) {
 
 	initApp();
 	initFields();
-	buildMapChooser();
+	buildMapChooser(selector);
 	mapResizeWidth();
-//	rotateArea(selector);
 	imageMapTrim(selector);
 	resizeImage(selector);
 	colorMap();
 	buildLegend();
-	labelMap();
+	labelMap(selector);
 	$(selector).maphilight();
+
 
 } // end initialize
 
 
 //////////////////////////// events //////////////////////////////////////////
 $(document).ready(function(){
+
+			
+			$("area").on("mouseover",function(){
+				var loc = $(this).data("geo");
+				mapOnMouseOver(loc);
+			});
+
 
 			// make tooltip go away when mouse is moved off of area
 			$("area").mouseleave(function() {

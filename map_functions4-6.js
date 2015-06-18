@@ -306,7 +306,10 @@ function Contour(a) {
 //////////////////////////////////////////////////////////////////////////////////////
 Contour.prototype.area = function() {
   var area=0;
-  var pts = this.pts;
+  
+// need to make points counter-clockwise (reverse) since postive y values point downwards
+// see http://www.mathopenref.com/coordpolygonarea2.html 
+  var pts = this.pts.reverse();
   var nPts = pts.length;
   var j=nPts-1;
   var p1; var p2;
@@ -627,6 +630,7 @@ function initApp () {
 
 	var app_defaults = {
 		"polygon_border_color":"FFFFFF",
+		"show_tooltips" : true,
 		"tooltip_heading": "",
 		"tooltip_footer": "",
 		"color_no_data":"AAAAAA",
@@ -642,6 +646,7 @@ function initApp () {
 		"map_rotation_degrees" : 0
 	}
 	map_init.settings = $.extend({},app_defaults,map_init.settings);
+	console.log(map_init);
 
 
 }
@@ -660,7 +665,8 @@ function initFields () {
 			"end_color" : "#FF2C00",
 			"type": "number",
 			"legend_columns" : 1,
-			"tooltip": true
+			"tooltip": true,
+			"label_field": "label"
 	};
 
 	if (typeof(map_init.fields) === 'undefined') {
@@ -1106,6 +1112,9 @@ function buildMapChooser(selector){
 		html += "</select>";
 		$("#map_chooser").html(html);
 	} // end if
+	else {
+		$("#map_chooser_container").hide();
+	}
 }
 
 //////////////////////////////////////////////////////////////////////////////////////
@@ -1116,28 +1125,27 @@ function changeMap(selector,index) {
 	buildLegend(index);
 	$('.map').maphilight();
 }
-//////////////////////////////////////////////////////////////////////////////////////
-function areaToCoordArray(selector) {
 
-	var pointArray = [];
+//////////////////////////////////////////////////////////////////////////////////////
+function coordStrToContour(coordStr) {
+
+	var contour = new Contour();
 	var x,y;
 
-	var coordStr = $(selector).attr('coords');
 	var coordArry = coordStr.split(',');
 
-	for (j=0;x<coordArry.length;j+=2) {
+	for (j=0;j<coordArry.length;j+=2) {
 		x = parseInt(coordArry[j]);
 		y = parseInt(coordArry[j+1]);
-		pointArray.push([x,y]);
+		contour.pts.push(new Point(x,y));
 	}
-	return pointArray;
+	return contour;
 
 }
+
 //////////////////////////////////////////////////////////////////////////////////////
-function coordArrayToArea(selector,pointsArray) {
-	var coordStr = pointsArray.join(",");
-	$(selector).attr('coords',coordStr);
-	return $(selector);
+function contourToCoordStr(contour) {
+	return contour.pts.join(",");
 }
 
 //////////////////////////////////////////////////////////////////////////////////////
@@ -1238,6 +1246,7 @@ function initialize(selector) {
 
 	initApp();
 	initFields();
+	initToolTips();
 	buildMapChooser(selector);
 	mapResizeWidth();
 	imageMapTrim(selector);
@@ -1252,21 +1261,22 @@ function initialize(selector) {
 
 
 //////////////////////////// events //////////////////////////////////////////
-$(document).ready(function(){
+function initToolTips () {
 
-			
-			$("area").on("mouseover",function(){
-				var loc = $(this).data("geo");
-				mapOnMouseOver(loc);
-			});
+			if (map_init.settings.show_tooltips===true) {
+				$("area").on("mouseover",function(){
+					var loc = $(this).data("geo");
+					mapOnMouseOver(loc);
+				});
 
 
-			// make tooltip go away when mouse is moved off of area
-			$("area").mouseleave(function() {
-				UnTip();
-			});
-			$(".map_label").mouseleave(function() {
-				UnTip();
-			});
+				// make tooltip go away when mouse is moved off of area
+				$("area").mouseleave(function() {
+					UnTip();
+				});
+				$(".map_label").mouseleave(function() {
+					UnTip();
+				});
+			}
 
-});
+}
